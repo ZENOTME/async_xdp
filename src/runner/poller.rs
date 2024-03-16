@@ -128,11 +128,8 @@ impl<T: FrameHandle> XdpPoller<T> {
     }
 
     fn receive_rx(&mut self) -> anyhow::Result<usize> {
-        let recv_cnt = unsafe { self.rx_q.consume(&mut self.rx_burst) };
+        let recv_cnt = unsafe { self.rx_q.poll_and_consume(&mut self.rx_burst, 0)? };
         if recv_cnt == 0 {
-            if self.fill_q.needs_wakeup() {
-                self.rx_q.poll(0)?;
-            }
             return Ok(0);
         }
         let chunks = self.rx_burst[..recv_cnt].iter().chunks(BATCH_SIZSE);
