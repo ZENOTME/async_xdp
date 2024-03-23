@@ -29,24 +29,22 @@ enum UmemConfigState<T: FrameManager> {
 }
 
 /// XdpContextBuilder is used to build the XdpContext.
-pub struct XdpContextBuilder<T: FrameManager, R: PollerRunner> {
+pub struct XdpContextBuilder<T: FrameManager> {
     config: SocketConfig,
     if_name: String,
     queue_id: u32,
     umem_state: UmemConfigState<T>,
-    runner: R,
     use_huge_pages: bool,
 }
 
-impl<T: FrameManager, R: PollerRunner> XdpContextBuilder<T, R> {
+impl<T: FrameManager> XdpContextBuilder<T> {
     /// Create a new builder.
-    pub fn new(if_name: &str, queue_id: u32, runner: R) -> Self {
+    pub fn new(if_name: &str, queue_id: u32) -> Self {
         Self {
             config: SocketConfig::default(),
             if_name: if_name.to_string(),
             queue_id,
             umem_state: UmemConfigState::Init,
-            runner,
             use_huge_pages: false,
         }
     }
@@ -92,7 +90,7 @@ impl<T: FrameManager, R: PollerRunner> XdpContextBuilder<T, R> {
     }
 
     /// Build the XdpContext.
-    pub fn build(self) -> anyhow::Result<XdpContext> {
+    pub fn build<R: PollerRunner>(self, runner: &R) -> anyhow::Result<XdpContext> {
         let (umem, frame_manager) = match self.umem_state {
             UmemConfigState::Init => {
                 let config = UmemConfig::default();
@@ -119,7 +117,7 @@ impl<T: FrameManager, R: PollerRunner> XdpContextBuilder<T, R> {
             umem,
             self.if_name.clone(),
             self.queue_id,
-            &self.runner,
+            runner,
             frame_manager,
         )?;
 
@@ -284,7 +282,7 @@ pub struct XdpSendHandle {
 
 impl XdpSendHandle {
     /// Send the packet using frame.
-    pub fn send_frame(&mut self, data: SmallVec<[FrameDesc; BATCH_SIZSE]>) -> anyhow::Result<()> {
+    pub fn send_frame(&self, data: SmallVec<[FrameDesc; BATCH_SIZSE]>) -> anyhow::Result<()> {
         let iter = data.chunks(BATCH_SIZSE);
         for frames in iter {
             let mut elements = [Default::default(); BATCH_SIZSE];
@@ -298,7 +296,7 @@ impl XdpSendHandle {
     }
 
     /// Send the packet using data.
-    pub fn send(&mut self, data: Vec<u8>) -> anyhow::Result<()> {
+    pub fn send(&self, data: Vec<u8>) -> anyhow::Result<()> {
         self.send.send(XdpSendMsg::Send(data))?;
         Ok(())
     }
