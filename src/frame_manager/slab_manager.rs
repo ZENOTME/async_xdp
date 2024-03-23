@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use itertools::Itertools;
 use xsk_rs::FrameDesc;
 
+use crate::FrameFreeHandle;
+
 use super::{FrameHandle, FrameManager};
 
 /// Configuration for the SlabManager.
@@ -31,10 +33,11 @@ impl Default for SlabManagerConfig {
 pub struct SlabManager {
     config: SlabManagerConfig,
     available: Arc<Mutex<Vec<Vec<FrameDesc>>>>,
+    free: Arc<Mutex<Vec<FrameDesc>>>,
 }
 
 impl SlabManager {
-    fn alloc_one_slab(&mut self) -> anyhow::Result<Vec<FrameDesc>> {
+    fn alloc_one_slab(&self) -> anyhow::Result<Vec<FrameDesc>> {
         let mut available = self
             .available
             .lock()
@@ -45,7 +48,7 @@ impl SlabManager {
         Err(anyhow::anyhow!("no more available slab"))
     }
 
-    fn free_one_slab(&mut self, desc: Vec<FrameDesc>) -> anyhow::Result<()> {
+    fn free_one_slab(&self, desc: Vec<FrameDesc>) -> anyhow::Result<()> {
         assert!(
             desc.len() <= self.config.slab_size,
             "desc.len() = {}, slab_size = {}",
@@ -59,11 +62,22 @@ impl SlabManager {
         available.push(desc);
         Ok(())
     }
+
+    fn free_one_frame(&self, frame: FrameDesc) -> anyhow::Result<()> {
+        let mut free = self.free.lock().map_err(|err| anyhow::anyhow!("{err}"))?;
+        free.push(frame);
+        if free.len() == self.config.slab_size {
+            let free = std::mem::replace(&mut *free, Vec::with_capacity(self.config.slab_size));
+            self.free_one_slab(free)?;
+        }
+        Ok(())
+    }
 }
 
 impl FrameManager for SlabManager {
     type T = SlabHandle;
     type C = SlabManagerConfig;
+    type F = SlabFree;
 
     fn new(config: Self::C, frames: Vec<FrameDesc>) -> anyhow::Result<Self> {
         let available: Vec<Vec<FrameDesc>> = frames
@@ -75,6 +89,7 @@ impl FrameManager for SlabManager {
         Ok(Self {
             config,
             available: Arc::new(Mutex::new(available)),
+            free: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -83,6 +98,29 @@ impl FrameManager for SlabManager {
             manager: self.clone(),
             available: Vec::with_capacity(self.config.slab_size),
             free: Vec::with_capacity(self.config.slab_size),
+        })
+    }
+
+    fn free_handle(&self) -> Self::F {
+        SlabFree {
+            manager: self.clone(),
+        }
+    }
+}
+
+/// A free handle for the SlabManager.
+pub struct SlabFree {
+    manager: SlabManager,
+}
+
+impl FrameFreeHandle for SlabFree {
+    fn free(&self, frame: FrameDesc) -> anyhow::Result<()> {
+        self.manager.free_one_frame(frame)
+    }
+
+    fn clone_box(&self) -> Box<dyn FrameFreeHandle> {
+        Box::new(Self {
+            manager: self.manager.clone(),
         })
     }
 }

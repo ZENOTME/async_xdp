@@ -25,8 +25,21 @@ pub trait FrameManager: Clone + Send + 'static {
     type T: FrameHandle;
     /// Config type.
     type C: Default;
+    /// Global free handle.
+    type F: FrameFreeHandle;
     /// Create a new UmemRegionManager.
     fn new(config: Self::C, frames: Vec<FrameDesc>) -> anyhow::Result<Self>;
     /// Return a handle used to allocate, free frames.
     fn handle(&self) -> anyhow::Result<Self::T>;
+    /// Return a global free handle.
+    fn free_handle(&self) -> Self::F;
+}
+
+/// FrameFreeHandle is a trait that provides a way to free frames. This trait is used in `Drop` to Frame so it
+/// must guarantee that the free to manager diretly.
+pub trait FrameFreeHandle {
+    /// Free a frame to manager diretly.
+    fn free(&self, frame: FrameDesc) -> anyhow::Result<()>;
+    /// Clone for trait object.
+    fn clone_box(&self) -> Box<dyn FrameFreeHandle>;
 }

@@ -7,5 +7,7 @@ mod context;
 pub use context::*;
 mod runner;
 pub use runner::*;
+mod frame;
+pub use frame::*;
 
 pub use xsk_rs::*;

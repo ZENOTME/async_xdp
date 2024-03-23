@@ -7,12 +7,12 @@ use std::{
 use smallvec::SmallVec;
 use xsk_rs::{
     config::{Interface, SocketConfig, UmemConfig},
-    FrameDesc, Socket, Umem,
+    Socket, Umem,
 };
 
 use crate::{
-    FrameManager, JoinHandle, MpScSender, PollerRunner, SpScReceiver, XdpPoller, XdpReceiveMsg,
-    XdpSendMsg, BATCH_SIZSE,
+    Frame, FrameFreeHandle, FrameManager, JoinHandle, MpScSender, PollerRunner, SpScReceiver,
+    XdpPoller, XdpReceiveMsg, XdpSendMsg, BATCH_SIZSE,
 };
 
 enum UmemConfigState<T: FrameManager> {
@@ -129,10 +129,20 @@ impl<T: FrameManager> XdpContextBuilder<T> {
 ///
 /// # NOTE
 /// A device can only have one context.
-#[derive(Clone)]
 pub struct XdpContext {
     umem: Umem,
     inner: Arc<Mutex<XdpContextInner>>,
+    free_handle: Box<dyn FrameFreeHandle>,
+}
+
+impl Clone for XdpContext {
+    fn clone(&self) -> Self {
+        Self {
+            umem: self.umem.clone(),
+            inner: self.inner.clone(),
+            free_handle: self.free_handle.clone_box(),
+        }
+    }
 }
 
 impl XdpContext {
@@ -144,6 +154,7 @@ impl XdpContext {
         runner: &R,
         frame_manager: T,
     ) -> anyhow::Result<Self> {
+        let free_handle = Box::new(frame_manager.free_handle());
         let inner = XdpContextInner::new(
             socket_config,
             umem.clone(),
@@ -155,6 +166,7 @@ impl XdpContext {
         Ok(Self {
             umem,
             inner: Arc::new(Mutex::new(inner)),
+            free_handle,
         })
     }
 
@@ -166,7 +178,7 @@ impl XdpContext {
         })?;
         Ok(XdpReceiveHandle {
             receive,
-            _context: self.clone(),
+            context: self.clone(),
         })
     }
 
@@ -260,14 +272,23 @@ impl Drop for XdpContextInner {
 /// XdpReceiveHandle is used to receive the packet.
 pub struct XdpReceiveHandle {
     receive: SpScReceiver<XdpReceiveMsg>,
-    _context: XdpContext,
+    context: XdpContext,
 }
 
 impl XdpReceiveHandle {
     /// Receive the packet.
-    pub async fn receive(&mut self) -> anyhow::Result<SmallVec<[FrameDesc; BATCH_SIZSE]>> {
+    pub async fn receive(&mut self) -> anyhow::Result<SmallVec<[Frame; BATCH_SIZSE]>> {
         match self.receive.recv().await {
-            Some(XdpReceiveMsg::Recv(frames)) => Ok(frames),
+            Some(XdpReceiveMsg::Recv(frames)) => Ok(frames
+                .into_iter()
+                .map(|frame| unsafe {
+                    Frame::new(
+                        frame,
+                        &self.context.umem,
+                        self.context.free_handle.clone_box(),
+                    )
+                })
+                .collect()),
             None => Err(anyhow::anyhow!("CLose")),
         }
     }
@@ -282,7 +303,13 @@ pub struct XdpSendHandle {
 
 impl XdpSendHandle {
     /// Send the packet using frame.
-    pub fn send_frame(&self, data: SmallVec<[FrameDesc; BATCH_SIZSE]>) -> anyhow::Result<()> {
+    pub fn send_frame(&self, mut data: SmallVec<[Frame; BATCH_SIZSE]>) -> anyhow::Result<()> {
+        // Take out the desc from the frame.
+        let data = data
+            .iter_mut()
+            .map(|frame| unsafe { frame.take_desc() })
+            .collect::<Vec<_>>();
+
         let iter = data.chunks(BATCH_SIZSE);
         for frames in iter {
             let mut elements = [Default::default(); BATCH_SIZSE];
