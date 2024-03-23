@@ -1,6 +1,8 @@
 use async_xdp::{
-    FrameManager, SingleThreadRunner, SlabManager, SlabManagerConfig, XdpContextBuilder,
+    Frame, FrameManager, SingleThreadRunner, SlabManager, SlabManagerConfig, XdpContextBuilder,
+    XdpSendHandle, BATCH_SIZSE,
 };
+use packet::ether::Packet;
 use xsk_rs::{
     config::{SocketConfig, UmemConfig},
     Umem,
@@ -30,7 +32,7 @@ async fn ping_pong(dev1: &str, dev2: &str) {
     let mut dev2_context_builder = XdpContextBuilder::new(dev2, 0);
     dev2_context_builder
         .with_socket_config(socket_config)
-        .with_exist_umem(umem, frame_manager);
+        .with_exist_umem(umem.clone(), frame_manager);
 
     let dev1_context = dev1_context_builder.build(&runner).unwrap();
     let dev2_context = dev2_context_builder.build(&runner).unwrap();
@@ -43,13 +45,22 @@ async fn ping_pong(dev1: &str, dev2: &str) {
     loop {
         tokio::select! {
             frames = dev1_receive.receive() => {
-                let frames = frames.unwrap();
-                dev2_send.send_frame(frames.clone()).unwrap()
+                process(&dev2_send, frames.unwrap()).await;
             }
             frames = dev2_receive.receive() => {
-                let frames = frames.unwrap();
-                dev1_send.send_frame(frames.clone()).unwrap()
+                process(&dev1_send, frames.unwrap()).await;
             }
+        }
+    }
+}
+
+async fn process(send_handle: &XdpSendHandle, frames: smallvec::SmallVec<[Frame; BATCH_SIZSE]>) {
+    for frame in frames {
+        let packet = Packet::new(frame.as_ref()).unwrap();
+        if packet.destination().is_broadcast() {
+            send_handle.send(frame.as_ref().to_vec()).unwrap();
+        } else {
+            send_handle.send_frame(vec![frame].into()).unwrap();
         }
     }
 }
