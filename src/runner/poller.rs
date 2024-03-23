@@ -1,4 +1,4 @@
-use std::vec;
+use std::{io::Write, vec};
 
 use crate::frame_manager::FrameHandle;
 use itertools::Itertools;
@@ -50,7 +50,7 @@ pub(crate) struct XdpPoller<T: FrameHandle> {
 
     frame_handle: T,
 
-    _umem: Umem,
+    umem: Umem,
     fill_q: FillQueue,
     comp_q: CompQueue,
     tx_q: TxQueue,
@@ -84,7 +84,7 @@ impl<T: FrameHandle> XdpPoller<T> {
     ) -> anyhow::Result<Self> {
         Ok(Self {
             interface_name,
-            _umem: umem.clone(),
+            umem: umem.clone(),
             frame_handle,
             fill_q,
             comp_q,
@@ -170,8 +170,14 @@ impl<T: FrameHandle> XdpPoller<T> {
                     self.tx_burst[cnt..cnt + len].copy_from_slice(&new_frams[..len]);
                     cnt += len;
                 }
-                Ok(XdpSendMsg::Send(_data)) => {
-                    todo!()
+                Ok(XdpSendMsg::Send(data)) => {
+                    // Alloce a new frame.
+                    self.frame_handle.reserve(1)?;
+                    let mut frame = self.frame_handle.alloc_one()?;
+                    let mut payload = unsafe { self.umem.data_mut(&mut frame) };
+                    payload.cursor().write_all(&data)?;
+                    self.tx_burst[cnt] = frame;
+                    cnt += 1;
                 }
                 Err(TryRecvError::Empty) => {
                     break;
