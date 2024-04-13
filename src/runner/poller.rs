@@ -1,7 +1,8 @@
-use std::{io::Write, vec};
+use std::{collections::HashSet, io::Write, vec};
 
 use crate::frame_manager::FrameHandle;
 use itertools::Itertools;
+use log::{error, trace, warn};
 use smallvec::SmallVec;
 use tokio::sync::mpsc::error::TryRecvError;
 use xsk_rs::{CompQueue, FillQueue, FrameDesc, RxQueue, TxQueue, Umem};
@@ -63,6 +64,9 @@ pub(crate) struct XdpPoller<T: FrameHandle> {
     complete_burst: Box<[FrameDesc]>,
     fill_burst: Box<[FrameDesc]>,
     tx_burst: Box<[FrameDesc]>,
+
+    trace_mode: bool,
+    send_frame_desc: HashSet<usize>,
 }
 
 impl<T: FrameHandle> XdpPoller<T> {
@@ -81,6 +85,7 @@ impl<T: FrameHandle> XdpPoller<T> {
         comp_q_size: usize,
         rx_q_size: usize,
         tx_q_size: usize,
+        trace_mode: bool,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             interface_name,
@@ -96,6 +101,8 @@ impl<T: FrameHandle> XdpPoller<T> {
             fill_burst: vec![Default::default(); fill_q_size].into_boxed_slice(),
             complete_burst: vec![Default::default(); comp_q_size].into_boxed_slice(),
             tx_burst: vec![Default::default(); tx_q_size].into_boxed_slice(),
+            trace_mode,
+            send_frame_desc: HashSet::new(),
         })
     }
 
@@ -153,6 +160,13 @@ impl<T: FrameHandle> XdpPoller<T> {
     fn reap_fill_q(&mut self) -> anyhow::Result<()> {
         let complete_cnt = unsafe { self.comp_q.consume(&mut self.complete_burst) };
         if complete_cnt > 0 {
+            if self.trace_mode {
+                self.complete_burst[..complete_cnt].iter().for_each(|frame| {
+                    if !self.send_frame_desc.remove(&frame.addr()) {
+                        error!("The frame desc is not in the set: {:?}: something wrong fail happen", frame.addr());
+                    }
+                });
+            }
             let res = self.complete_burst[..complete_cnt].iter().copied();
             self.frame_handle.free(res)?;
         }
@@ -191,6 +205,13 @@ impl<T: FrameHandle> XdpPoller<T> {
             }
         }
         if cnt > 0 {
+            if self.trace_mode {
+                self.tx_burst[..cnt].iter().for_each(|frame| {
+                    if !self.send_frame_desc.insert(frame.addr()) {
+                        warn!("The frame desc is already in the set: {:?}: some pack send fail happen", frame.addr());
+                    }
+                });
+            }
             loop {
                 let res = unsafe { self.tx_q.produce_and_wakeup(&self.tx_burst[..cnt])? };
                 assert!(res == 0 || (res > 0 && res == cnt));
@@ -221,6 +242,12 @@ impl<T: FrameHandle> Poller for XdpPoller<T> {
     }
 
     fn run_once(&mut self) -> anyhow::Result<()> {
-        self.run_once()
+        self.run_once()?;
+        if self.trace_mode {
+            if !self.send_frame_desc.is_empty() {
+                trace!("sending frame: {:?}", self.send_frame_desc);
+            }
+        }
+        Ok(())
     }
 }

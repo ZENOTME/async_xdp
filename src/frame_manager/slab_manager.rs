@@ -189,6 +189,22 @@ impl FrameHandle for SlabHandle {
         }
         Ok(())
     }
+
+    fn statistics(&self) -> super::FrameStatistics {
+        super::FrameStatistics {
+            total_available: self
+                .manager
+                .available
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|slab| slab.len())
+                .sum::<usize>()
+                + self.manager.free.lock().unwrap().len()
+                + self.free.len()
+                + self.available.len(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -56,9 +56,9 @@ async fn ping_pong(dev1: &str, dev2: &str) {
 
 async fn process(send_handle: &XdpSendHandle, frames: smallvec::SmallVec<[Frame; BATCH_SIZSE]>) {
     for frame in frames {
-        let packet = Packet::new(frame.as_ref()).unwrap();
+        let packet = Packet::new(frame.data_ref()).unwrap();
         if packet.destination().is_broadcast() {
-            send_handle.send(frame.as_ref().to_vec()).unwrap();
+            send_handle.send(frame.data_ref().to_vec()).unwrap();
         } else {
             send_handle.send_frame(vec![frame].into()).unwrap();
         }

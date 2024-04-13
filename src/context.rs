@@ -35,6 +35,7 @@ pub struct XdpContextBuilder<T: FrameManager> {
     queue_id: u32,
     umem_state: UmemConfigState<T>,
     use_huge_pages: bool,
+    trace_mode: bool,
 }
 
 impl<T: FrameManager> XdpContextBuilder<T> {
@@ -46,6 +47,7 @@ impl<T: FrameManager> XdpContextBuilder<T> {
             queue_id,
             umem_state: UmemConfigState::Init,
             use_huge_pages: false,
+            trace_mode: false,
         }
     }
 
@@ -89,6 +91,12 @@ impl<T: FrameManager> XdpContextBuilder<T> {
         self
     }
 
+    /// Set the trace mode.
+    pub fn with_trace_mode(&mut self, trace_mode: bool) -> &mut Self {
+        self.trace_mode = trace_mode;
+        self
+    }
+
     /// Build the XdpContext.
     pub fn build<R: PollerRunner>(self, runner: &R) -> anyhow::Result<XdpContext> {
         let (umem, frame_manager) = match self.umem_state {
@@ -119,6 +127,7 @@ impl<T: FrameManager> XdpContextBuilder<T> {
             self.queue_id,
             runner,
             frame_manager,
+            self.trace_mode,
         )?;
 
         Ok(context)
@@ -153,6 +162,7 @@ impl XdpContext {
         queue_id: u32,
         runner: &R,
         frame_manager: T,
+        trace_mode: bool,
     ) -> anyhow::Result<Self> {
         let free_handle = Box::new(frame_manager.free_handle());
         let inner = XdpContextInner::new(
@@ -162,6 +172,7 @@ impl XdpContext {
             queue_id,
             runner,
             frame_manager,
+            trace_mode,
         )?;
         Ok(Self {
             umem,
@@ -212,6 +223,7 @@ impl XdpContextInner {
         queue_id: u32,
         runner: &R,
         frame_manager: T,
+        trace_mode: bool,
     ) -> anyhow::Result<Self> {
         // Create the socket.
         let interface = Interface::from_str(&if_name)?;
@@ -239,6 +251,7 @@ impl XdpContextInner {
             4096,
             socket_config.rx_queue_size().get() as usize,
             socket_config.tx_queue_size().get() as usize,
+            trace_mode,
         )?;
         // Add the poller to the runner.
         let join = runner.add_poller(poller)?;
