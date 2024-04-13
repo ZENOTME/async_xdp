@@ -243,10 +243,8 @@ impl<T: FrameHandle> Poller for XdpPoller<T> {
 
     fn run_once(&mut self) -> anyhow::Result<()> {
         self.run_once()?;
-        if self.trace_mode {
-            if !self.send_frame_desc.is_empty() {
-                trace!("sending frame: {:?}", self.send_frame_desc);
-            }
+        if self.trace_mode && !self.send_frame_desc.is_empty() {
+            trace!("sending frame: {:?}", self.send_frame_desc);
         }
         Ok(())
     }

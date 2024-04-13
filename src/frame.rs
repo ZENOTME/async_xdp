@@ -1,4 +1,7 @@
-use xsk_rs::{umem::frame::{Data, DataMut}, FrameDesc, Umem};
+use xsk_rs::{
+    umem::frame::{Data, DataMut},
+    FrameDesc, Umem,
+};
 
 use crate::FrameFreeHandle;
 
