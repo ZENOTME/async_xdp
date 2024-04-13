@@ -45,9 +45,9 @@ pub trait FrameManager: Clone + Send + 'static {
 }
 
 /// FrameFreeHandle is a trait that provides a way to free frames. This trait is used in `Drop` to Frame so it
-/// must guarantee that the free to manager diretly.
+/// must guarantee that the free to manager directly.
 pub trait FrameFreeHandle: Sync + Send + 'static {
-    /// Free a frame to manager diretly.
+    /// Free a frame to manager directly.
     fn free(&self, frame: FrameDesc) -> anyhow::Result<()>;
     /// Clone for trait object.
     fn clone_box(&self) -> Box<dyn FrameFreeHandle>;

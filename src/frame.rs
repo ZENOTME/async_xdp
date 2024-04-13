@@ -7,7 +7,7 @@ use crate::FrameFreeHandle;
 
 /// A Frame represents a frame in the UMEM.
 /// It's aim to make the frame be used in a more simple and safe way.
-/// When ownership of the frame is user, we used the Drop trait to gurantee that the frame will be freed safely.
+/// When ownership of the frame is user, we used the Drop trait to guarantee that the frame will be freed safely.
 /// When ownership return back to the manager, we call `take_desc` to extract the frame desc and the frame will be drop without free.
 pub struct Frame {
     desc: Option<FrameDesc>,
