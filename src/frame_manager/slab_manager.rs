@@ -160,7 +160,10 @@ impl FrameHandle for SlabHandle {
     where
         I: IntoIterator<Item = FrameDesc>,
     {
-        let mut iter = frames.into_iter();
+        let mut iter = frames.into_iter().map(|mut frame| {
+            frame.reset();
+            frame
+        });
         while self.free.len() < self.manager.config.slab_size {
             if let Some(frame) = iter.next() {
                 self.free.push(frame);

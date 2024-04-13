@@ -1,4 +1,4 @@
-use xsk_rs::{FrameDesc, Umem};
+use xsk_rs::{umem::frame::{Data, DataMut}, FrameDesc, Umem};
 
 use crate::FrameFreeHandle;
 
@@ -13,6 +13,13 @@ pub struct Frame {
 }
 
 impl Frame {
+    /// Get the frame desc.
+    pub fn desc(&self) -> &FrameDesc {
+        self.desc
+            .as_ref()
+            .expect("Gurarantee the frame is valid util return by to context")
+    }
+
     /// Create a new Frame.
     pub(crate) unsafe fn new(desc: FrameDesc, umem: &Umem, free: Box<dyn FrameFreeHandle>) -> Self {
         Self {
@@ -29,31 +36,27 @@ impl Frame {
     }
 }
 
-impl AsRef<[u8]> for Frame {
-    fn as_ref(&self) -> &[u8] {
-        let (ptr, len) = unsafe {
-            let data = self.umem.data(
+impl Frame {
+    /// Return the data of the frame.
+    pub fn data_ref(&self) -> Data {
+        unsafe {
+            self.umem.data(
                 &self
                     .desc
                     .expect("Gurarantee the frame is valid util return by to context"),
-            );
-            (data.contents().as_ptr(), data.len())
-        };
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+            )
+        }
     }
-}
 
-impl AsMut<[u8]> for Frame {
-    fn as_mut(&mut self) -> &mut [u8] {
-        let (ptr, len) = unsafe {
-            let mut data = self.umem.data_mut(
+    /// Return the mutable data of the frame.
+    pub fn data_mut(&mut self) -> DataMut {
+        unsafe {
+            self.umem.data_mut(
                 self.desc
                     .as_mut()
                     .expect("Gurarantee the frame is valid util return by to context"),
-            );
-            (data.contents_mut().as_mut_ptr(), data.len())
-        };
-        unsafe { std::slice::from_raw_parts_mut(ptr, len) }
+            )
+        }
     }
 }
 
