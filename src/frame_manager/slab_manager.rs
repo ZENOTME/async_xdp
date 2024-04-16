@@ -63,7 +63,8 @@ impl SlabManager {
         Ok(())
     }
 
-    fn free_one_frame(&self, frame: FrameDesc) -> anyhow::Result<()> {
+    fn free_one_frame(&self, mut frame: FrameDesc) -> anyhow::Result<()> {
+        frame.reset();
         let mut free = self.free.lock().map_err(|err| anyhow::anyhow!("{err}"))?;
         free.push(frame);
         if free.len() == self.config.slab_size {
