@@ -247,8 +247,8 @@ impl XdpContextInner {
             receive_sender,
             frame_manager.handle()?,
             // # TODO: fix it later
-            4096,
-            4096,
+            socket_config.rx_queue_size().get() as usize,
+            socket_config.tx_queue_size().get() as usize,
             socket_config.rx_queue_size().get() as usize,
             socket_config.tx_queue_size().get() as usize,
             trace_mode,

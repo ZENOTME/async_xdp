@@ -36,10 +36,15 @@ impl PollerRunner for SingleThreadRunner {
     fn add_poller<T: Poller>(&self, mut poller: T) -> anyhow::Result<JoinHandle<()>> {
         let handle = thread::spawn(move || {
             poller.init().unwrap();
+            let mut now = std::time::Instant::now();
             loop {
                 if let Err(err) = poller.run_once() {
                     log::error!("Poller run_once failed: {:?}", err);
                     break;
+                }
+                if now.elapsed().as_secs() > 1 {
+                    poller.run_per_sec().unwrap();
+                    now = std::time::Instant::now();
                 }
             }
         });

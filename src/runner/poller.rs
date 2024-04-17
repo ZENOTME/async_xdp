@@ -13,6 +13,8 @@ pub trait Poller: Send + 'static {
     fn init(&mut self) -> anyhow::Result<()>;
     /// Run the poller.
     fn run_once(&mut self) -> anyhow::Result<()>;
+    /// Run the poller per second.
+    fn run_per_sec(&mut self) -> anyhow::Result<()>;
 }
 
 /// The number of frames be pass.
@@ -67,6 +69,8 @@ pub(crate) struct XdpPoller<T: FrameHandle> {
 
     trace_mode: bool,
     send_frame_desc: HashSet<usize>,
+
+    fill_q_size: usize,
 }
 
 impl<T: FrameHandle> XdpPoller<T> {
@@ -103,6 +107,7 @@ impl<T: FrameHandle> XdpPoller<T> {
             tx_burst: vec![Default::default(); tx_q_size].into_boxed_slice(),
             trace_mode,
             send_frame_desc: HashSet::new(),
+            fill_q_size,
         })
     }
 
@@ -148,8 +153,12 @@ impl<T: FrameHandle> XdpPoller<T> {
     }
 
     fn receive(&mut self) -> anyhow::Result<()> {
-        let recv_cnt = self.receive_rx()?;
+        let cnt = self.fill_q.free_num(self.fill_q_size as u32 / 2) as usize;
+        if cnt > self.fill_q_size / 2 {
+            self.produce_fill_q(cnt).unwrap();
+        }
 
+        let recv_cnt = self.receive_rx()?;
         if recv_cnt > 0 {
             self.produce_fill_q(recv_cnt)?;
         }
@@ -246,6 +255,10 @@ impl<T: FrameHandle> Poller for XdpPoller<T> {
         if self.trace_mode && !self.send_frame_desc.is_empty() {
             trace!("sending frame: {:?}", self.send_frame_desc);
         }
+        Ok(())
+    }
+
+    fn run_per_sec(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }

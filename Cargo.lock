@@ -706,7 +706,7 @@ checksum = "32b752e52a2da0ddfbdbcc6fceadfeede4c939ed16d13e648833a61dfb611ed8"
 [[package]]
 name = "xsk-rs"
 version = "0.5.0"
-source = "git+https://github.com/ZENOTME/xsk-rs?branch=libxdp#f583c5e9a0fdb01ca37e01018fd7f7c1849326d4"
+source = "git+https://github.com/ZENOTME/xsk-rs?branch=libxdp#4821c0013d745223d6083c3086dd0ec2e106ba56"
 dependencies = [
  "bitflags 2.5.0",
  "cfg-if",
