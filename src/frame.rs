@@ -43,8 +43,8 @@ impl Frame {
     /// Adjust the frame address ahead to frame headroom.
     /// # NOTE:
     /// If offset out of the frame headroom, it panic.
-    pub fn adjust_ahead(&mut self, offset: usize) {
-        self.umem.adjust_addr_ahead(
+    pub fn adjust_head(&mut self, offset: i32) {
+        self.umem.adjust_addr(
             self.desc
                 .as_mut()
                 .expect("Gurarantee the frame is valid util return by to context"),
