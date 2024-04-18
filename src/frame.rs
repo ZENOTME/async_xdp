@@ -40,6 +40,18 @@ impl Frame {
 }
 
 impl Frame {
+    /// Adjust the frame address ahead to frame headroom.
+    /// # NOTE:
+    /// If offset out of the frame headroom, it panic.
+    pub fn adjust_ahead(&mut self, offset: usize) {
+        self.umem.adjust_addr_ahead(
+            self.desc
+                .as_mut()
+                .expect("Gurarantee the frame is valid util return by to context"),
+            offset,
+        )
+    }
+
     /// Return the data of the frame.
     pub fn data_ref(&self) -> Data {
         unsafe {
