@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-xsk-rs = { git="https://github.com/ZENOTME/xsk-rs", branch = "libxdp"}
+xsk-rs = { git="https://github.com/ZENOTME/xsk-rs", branch = "umem_hack"}
 smallvec = "1.6.1"
 anyhow = "1"
 itertools = "0.12.1"
