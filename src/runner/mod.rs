@@ -10,9 +10,15 @@ use core_affinity::CoreId;
 pub type JoinHandle<T> = std::thread::JoinHandle<T>;
 
 /// PollerRunner is a trait that provides a way to run pollers.
-pub trait PollerRunner: Clone + Send + Sync + 'static {
+pub trait PollerRunner: Send + Sync + 'static {
     /// Add a poller to the runner.
-    fn add_poller<T: Poller>(&self, poller: T) -> anyhow::Result<JoinHandle<()>>;
+    fn add_poller(&self, poller: Box<dyn Poller>) -> anyhow::Result<JoinHandle<()>>;
+}
+
+impl PollerRunner for Box<dyn PollerRunner> {
+    fn add_poller(&self, poller: Box<dyn Poller>) -> anyhow::Result<JoinHandle<()>> {
+        self.as_ref().add_poller(poller)
+    }
 }
 
 /// SingleThreadRunner is a simple runner to run each poller in a single thread. It will bind each poller to a different core in Round Robin way.
@@ -33,20 +39,10 @@ impl Default for SingleThreadRunner {
 }
 
 impl PollerRunner for SingleThreadRunner {
-    fn add_poller<T: Poller>(&self, mut poller: T) -> anyhow::Result<JoinHandle<()>> {
+    fn add_poller(&self, mut poller: Box<dyn Poller>) -> anyhow::Result<JoinHandle<()>> {
         let handle = thread::spawn(move || {
             poller.init().unwrap();
-            let mut now = std::time::Instant::now();
-            loop {
-                if let Err(err) = poller.run_once() {
-                    log::error!("Poller run_once failed: {:?}", err);
-                    break;
-                }
-                if now.elapsed().as_secs() > 1 {
-                    poller.run_per_sec().unwrap();
-                    now = std::time::Instant::now();
-                }
-            }
+            poller.run().unwrap();
         });
         Ok(handle)
     }
@@ -81,7 +77,7 @@ impl Default for BindCoreRunner {
 }
 
 impl PollerRunner for BindCoreRunner {
-    fn add_poller<T: Poller>(&self, mut poller: T) -> anyhow::Result<JoinHandle<()>> {
+    fn add_poller(&self, mut poller: Box<dyn Poller>) -> anyhow::Result<JoinHandle<()>> {
         let current = self
             .next_core_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -89,13 +85,24 @@ impl PollerRunner for BindCoreRunner {
         let handle = thread::spawn(move || {
             core_affinity::set_for_current(core_id);
             poller.init().unwrap();
-            loop {
-                if let Err(err) = poller.run_once() {
-                    log::error!("Poller run_once failed: {:?}", err);
-                    break;
-                }
-            }
+            poller.run().unwrap();
         });
         Ok(handle)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    fn assert_object_safe(_: &dyn super::PollerRunner) {}
+    fn pass_poller_runner<R: super::PollerRunner>(_runner: &R) {}
+    fn assert_box_trait(runner: Box<dyn super::PollerRunner>) {
+        pass_poller_runner(&runner);
+    }
+
+    #[test]
+    fn ensure_static_property() {
+        let runner = Box::new(super::SingleThreadRunner::new());
+        assert_object_safe(&*runner);
+        assert_box_trait(runner);
     }
 }

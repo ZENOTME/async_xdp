@@ -254,7 +254,7 @@ impl XdpContextInner {
             trace_mode,
         )?;
         // Add the poller to the runner.
-        let join = runner.add_poller(poller)?;
+        let join = runner.add_poller(Box::new(poller))?;
 
         Ok(Self {
             receive: Some(receive_receiver),

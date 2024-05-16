@@ -12,9 +12,7 @@ pub trait Poller: Send + 'static {
     /// Initialize the poller.
     fn init(&mut self) -> anyhow::Result<()>;
     /// Run the poller.
-    fn run_once(&mut self) -> anyhow::Result<()>;
-    /// Run the poller per second.
-    fn run_per_sec(&mut self) -> anyhow::Result<()>;
+    fn run(&mut self) -> anyhow::Result<()>;
 }
 
 /// The number of frames be pass.
@@ -241,6 +239,9 @@ impl<T: FrameHandle> XdpPoller<T> {
     fn run_once(&mut self) -> anyhow::Result<()> {
         self.receive()?;
         self.send()?;
+        if self.trace_mode && !self.send_frame_desc.is_empty() {
+            trace!("sending frame: {:?}", self.send_frame_desc);
+        }
         Ok(())
     }
 }
@@ -250,15 +251,13 @@ impl<T: FrameHandle> Poller for XdpPoller<T> {
         self.init()
     }
 
-    fn run_once(&mut self) -> anyhow::Result<()> {
-        self.run_once()?;
-        if self.trace_mode && !self.send_frame_desc.is_empty() {
-            trace!("sending frame: {:?}", self.send_frame_desc);
+    fn run(&mut self) -> anyhow::Result<()> {
+        loop {
+            if let Err(err) = self.run_once() {
+                log::error!("Poller run_once failed: {:?}", err);
+                break;
+            }
         }
-        Ok(())
-    }
-
-    fn run_per_sec(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }
